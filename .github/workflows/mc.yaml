@@ -22,38 +22,49 @@ jobs:
     - name: Auth ngrok
       run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
-    - name: Set runner password
-      run: |
-        sudo sysadminctl -resetPasswordFor runner -newPassword "P@ssw0rd!" -adminUser runner -adminPassword ""
-
     - name: Enable Screen Sharing (VNC)
       run: |
+        # 1. Activate Remote Management for runner user
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on -privs -all -users runner
         
+        # 2. Set legacy VNC password
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -configure -clientopts -setvnclegacy -vnclegacy yes \
           -setvncpw -vncpw "P@ssw0rd!"
         
+        # 3. Restart agent WITH -console (critical for headless runners)
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-          -restart -agent
+          -restart -agent -console
         
+        # 4. Ensure Screen Sharing launchd service is loaded
         sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+        
+        sleep 5
+
+    - name: Verify VNC is listening
+      run: |
+        echo "=== Port 5900 ==="
+        sudo lsof -i :5900 || echo "NOT LISTENING"
+        echo "=== ARDAgent process ==="
+        ps aux | grep -i "ardagent" | grep -v grep || echo "ARD Agent not running"
+        echo "=== Screen Sharing service ==="
+        sudo launchctl list | grep -i screensharing || true
 
     - name: Create VNC Tunnel
       run: |
         ./ngrok tcp 5900 &
         sleep 15
+        
+        echo "=== ngrok tunnel status ==="
+        curl -s http://localhost:4040/api/tunnels | grep -o '"public_url":"[^"]*"' || echo "ngrok API unreachable"
+        
         echo "========================================"
         echo "VNC tunnel is now available!"
         echo "Dashboard: https://dashboard.ngrok.com/endpoints/status"
-        echo ""
-        echo "Connect with:"
-        echo "  Legacy VNC password: P@ssw0rd!"
-        echo "  OR macOS user auth:"
-        echo "    Username: runner"
-        echo "    Password: P@ssw0rd!"
+        echo "Password:  P@ssw0rd!"
         echo "========================================"
+        
         while true; do
           sleep 300
           echo "Session active... $(date '+%Y-%m-%d %H:%M:%S')"
