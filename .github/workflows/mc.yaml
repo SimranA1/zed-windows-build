@@ -22,34 +22,28 @@ jobs:
     - name: Auth ngrok
       run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
+    - name: Set runner password
+      run: |
+        # Set a known password for the runner user
+        sudo dscl . -passwd /Users/runner "P@ssw0rd!"
+
     - name: Enable Screen Sharing (VNC)
       run: |
-        # Activate and configure Remote Management for runner user
+        # Activate Remote Management for runner user
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on -privs -all -users runner
         
-        # Enable legacy VNC password authentication
+        # Enable legacy VNC password
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -configure -clientopts -setvnclegacy -vnclegacy yes \
           -setvncpw -vncpw "P@ssw0rd!"
         
-        # Restart the ARD agent to apply settings
+        # Restart agent WITHOUT -console (runner is already logged into GUI)
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-          -restart -agent -console
+          -restart -agent
         
-        # Ensure Screen Sharing service is loaded
+        # Load Screen Sharing service
         sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
-        
-        echo "Screen Sharing enabled on port 5900"
-
-    - name: Debug VNC Service
-      run: |
-        echo "=== Port 5900 status ==="
-        sudo lsof -i :5900 || echo "Not listening"
-        echo "=== Screen Sharing service ==="
-        sudo launchctl list | grep -i screen || true
-        echo "=== Remote Management config ==="
-        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -query 2>/dev/null || true
 
     - name: Create VNC Tunnel
       run: |
@@ -57,14 +51,14 @@ jobs:
         sleep 15
         echo "========================================"
         echo "VNC tunnel is now available!"
-        echo "Check ngrok dashboard:"
-        echo "https://dashboard.ngrok.com/endpoints/status"
+        echo "Dashboard: https://dashboard.ngrok.com/endpoints/status"
         echo ""
-        echo "Connect with VNC client:"
-        echo "  Password: P@ssw0rd!"
+        echo "Try connecting with:"
+        echo "  Legacy VNC password: P@ssw0rd!"
+        echo "  OR macOS user auth:"
+        echo "    Username: runner"
+        echo "    Password: P@ssw0rd!"
         echo "========================================"
-        
-        # Keep alive
         while true; do
           sleep 300
           echo "Session active... $(date '+%Y-%m-%d %H:%M:%S')"
@@ -72,6 +66,4 @@ jobs:
 
     - name: Cleanup
       if: always()
-      run: |
-        pkill -f ngrok || true
-        echo "Tunnel closed."
+      run: pkill -f ngrok || true
