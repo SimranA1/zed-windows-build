@@ -24,25 +24,20 @@ jobs:
 
     - name: Set runner password
       run: |
-        # Set a known password for the runner user
-        sudo dscl . -passwd /Users/runner "P@ssw0rd!"
+        sudo sysadminctl -resetPasswordFor runner -newPassword "P@ssw0rd!" -adminUser runner -adminPassword ""
 
     - name: Enable Screen Sharing (VNC)
       run: |
-        # Activate Remote Management for runner user
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -activate -configure -access -on -privs -all -users runner
         
-        # Enable legacy VNC password
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -configure -clientopts -setvnclegacy -vnclegacy yes \
           -setvncpw -vncpw "P@ssw0rd!"
         
-        # Restart agent WITHOUT -console (runner is already logged into GUI)
         sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
           -restart -agent
         
-        # Load Screen Sharing service
         sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 
     - name: Create VNC Tunnel
@@ -53,7 +48,7 @@ jobs:
         echo "VNC tunnel is now available!"
         echo "Dashboard: https://dashboard.ngrok.com/endpoints/status"
         echo ""
-        echo "Try connecting with:"
+        echo "Connect with:"
         echo "  Legacy VNC password: P@ssw0rd!"
         echo "  OR macOS user auth:"
         echo "    Username: runner"
