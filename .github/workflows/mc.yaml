@@ -1,0 +1,66 @@
+name: Open macOS Remote Desktop (VNC)
+on: [push, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  remote-access:
+    runs-on: macos-latest
+    steps:
+    - name: Download ngrok (macOS)
+      run: |
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "arm64" ]; then
+          curl -Lo ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-arm64.zip
+        else
+          curl -Lo ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip
+        fi
+        unzip -o ngrok.zip
+        chmod +x ngrok
+
+    - name: Auth ngrok
+      run: ./ngrok authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+    - name: Enable Screen Sharing (VNC)
+      run: |
+        # Activate Remote Management / Screen Sharing for the runner user
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -activate -configure -access -on -privs -all -users runner
+        
+        # Set a dedicated VNC password (separate from macOS login password)
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -configure -clientopts -setvnclegacy -vnclegacy yes \
+          -setvncpw -vncpw "P@ssw0rd!"
+        
+        # Ensure the Screen Sharing service is running
+        sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+        
+        echo "Screen Sharing enabled on port 5900"
+
+    - name: Create VNC Tunnel
+      run: |
+        ./ngrok tcp 5900 &
+        sleep 10
+        echo "========================================"
+        echo "VNC tunnel is now available!"
+        echo "Check ngrok dashboard for connection details:"
+        echo "https://dashboard.ngrok.com/endpoints/status"
+        echo ""
+        echo "Connect with any VNC client using:"
+        echo "  Address: <host:port from ngrok dashboard>"
+        echo "  Password: P@ssw0rd!"
+        echo "========================================"
+        
+        # Keep the session alive
+        while true; do
+          sleep 300
+          echo "Session still active... $(date '+%Y-%m-%d %H:%M:%S')"
+        done
+
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "Closing VNC tunnel..."
+        pkill -f ngrok || true
+        echo "VNC tunnel closed."
